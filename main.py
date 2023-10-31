@@ -1,8 +1,20 @@
 import tensorflow as tf
-#from tensorflow import keras
-#from keras.datasets import mnist
-#from keras import backend as K
-#from matplotlib import pyplot as plt
+from tensorflow import keras
+from keras.datasets import mnist
+from keras import backend as K
+import numpy as np
+import os
+import PIL
+import PIL.Image
+import tensorflow as tf
+import tensorflow_datasets as tfds
+import pathlib
+
+currentPath = os.getcwd()
+img= keras.utils.load_img("Dataset/FoodSeg103/Images/ann_dir/test/00000048.png", target_size=(500,500))
+img1=tf.keras.utils.image_dataset_from_directory("Dataset/FoodSeg103/Images/ann_dir/test", labels="None")
+img2=tf.keras.utils.image_dataset_from_directory("/DataSet/FoodSeg/Images/ann_dir/test")
+# train_data =  list(data_dir.glob('Dataset/FoodSeg103/*'))
 
 
 devices = tf.config.list_physical_devices()
