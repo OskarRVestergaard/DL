@@ -7,6 +7,7 @@ from keras.utils import Sequence
 from keras.utils import to_categorical
 import numpy as np
 from PIL import Image
+import random
 
 ##The model
 def convolution_block(
@@ -88,7 +89,12 @@ class CustomDataGenerator(Sequence):
         self.validation_split = validation_split
         self.image_size = image_size
         self.num_of_classes = num_of_classes
-        self.data_augmentation_config = data_augmentation_config
+        self.use_augmentation = False
+        if data_augmentation_config: #NOTE Nogle augments bør virke forskelligt for billede og labels (eksempelvis brightness)
+            self.use_augmentation = True
+            a_seed = random.randint(0, 2000000000)
+            self.img_augment = data_augmentation_config(a_seed)
+            self.mask_augment = data_augmentation_config(a_seed)
 
     def __len__(self):
         return int(np.ceil(len(self.image_paths) / self.batch_size))
@@ -104,9 +110,11 @@ class CustomDataGenerator(Sequence):
     def load_data(self, start, end):
         images = []
         masks = []
-        for i in range(start, min(end, len(self.image_paths))):
+        for i in range(start, min(end, len(self.image_paths))):            
             raw_img = tf.io.read_file(self.image_paths[i])
             img = tf.image.decode_png(raw_img, channels=3)
+            if self.use_augmentation:
+                img = self.img_augment(img)
             img.set_shape([None, None, 3])
             img = tf.image.resize(images=img, size=[self.image_size, self.image_size])
             img = tf.keras.applications.resnet50.preprocess_input(img)
@@ -114,6 +122,8 @@ class CustomDataGenerator(Sequence):
 
             raw_img = tf.io.read_file(self.mask_paths[i])
             mask = tf.image.decode_png(raw_img, channels=1)
+            if self.use_augmentation:
+                mask = self.mask_augment(mask)
             mask.set_shape([None, None, 1])
             mask = tf.image.resize(images=mask, size=[self.image_size, self.image_size], method='nearest')
             one_hot_mask=to_categorical(mask,num_classes=self.num_of_classes)
