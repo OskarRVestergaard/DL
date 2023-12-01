@@ -23,10 +23,10 @@ models_path = Path(os.getcwd() + r"/Models")
 batch_size = 8
 image_size = 128
 num_classes = 104
-num_train_images = 4983
-num_val_images = 2135
 
 def __load_images_combined__():
+    num_train_images = 4983
+    num_val_images = 2135
     train_images_path = Path(data_folder_path, r"img_dir/train")
     train_ann_path = Path(data_folder_path, r"ann_dir/train")
     test_images_path = Path(data_folder_path, r"img_dir/test")
@@ -89,9 +89,9 @@ def train_new_model(epochs, useEarlyStopping=True, loss=keras.losses.Categorical
 
     history = model.fit(
         train_data_generator,
-        steps_per_epoch=num_train_images//batch_size,
+        steps_per_epoch=len(train_image_paths)//batch_size,
         validation_data=val_data_generator,
-        validation_steps=num_val_images//batch_size,
+        validation_steps=len(val_image_paths)//batch_size,
         epochs=epochs,
         callbacks=([early_stopping] if useEarlyStopping else [])
     )
@@ -106,7 +106,7 @@ def create_data_augmentation_config():
         ])
     )
 
-def display_image(index, data_augmentation_config):
+def display_image(index, data_augmentation_config): #Consider changing index to path
     a_seed = random.randint(0, 2000000000)
     augment = data_augmentation_config(a_seed)
 
@@ -120,7 +120,7 @@ def display_image(index, data_augmentation_config):
     plt.imshow(resized_image_for_display)
     plt.show()
 
-def display_prediction(model, index):
+def display_prediction(model, index): #Consider changing index to path
     raw_img = tf.io.read_file(val_image_paths[index])
     raw_img = tf.image.decode_png(raw_img, channels=3)
     raw_img.set_shape([None, None, 3])
