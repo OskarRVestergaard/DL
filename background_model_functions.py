@@ -47,11 +47,12 @@ def DilatedSpatialPyramidPooling(dspp_input):
     output = convolution_block(x, kernel_size=1)
     return output
 
-def DeeplabV3Plus(image_size, num_classes):
+def DeeplabV3Plus(image_size, num_classes, trainable):
     model_input = keras.Input(shape=(image_size, image_size, 3))
     resnet50 = keras.applications.ResNet50(
         weights="imagenet", include_top=False, input_tensor=model_input
     )
+    resnet50.trainable = trainable
     x = resnet50.get_layer("conv4_block6_2_relu").output
     x = DilatedSpatialPyramidPooling(x)
 
@@ -71,18 +72,10 @@ def DeeplabV3Plus(image_size, num_classes):
     )(x)
     model_output = layers.Conv2D(num_classes, kernel_size=(1, 1), padding="same", kernel_initializer=keras.initializers.HeNormal(), activation='softmax')(x)
 
-
-    # Adjust the number of output channels to match the number of classes
-    # x_out = layers.Conv2D(104, (1, 1), activation='softmax')(model_output)
-
-    # Use a Reshape layer to match the output shape to (height, width, num_classes)
-    # x_out = layers.Reshape((image_size, image_size, 104))(x_out)
-
-
     return keras.Model(inputs=model_input, outputs=model_output)
 
 class CustomDataGenerator(Sequence):
-    def __init__(self, image_paths, mask_paths, batch_size, image_size, num_of_classes, data_augmentation_config=None, validation_split=0.2):
+    def __init__(self, image_paths, mask_paths, batch_size, image_size, num_of_classes, data_augmentation_config=None, brightness_contrast_augmentation_config=None, validation_split=0.2):
         self.image_paths = image_paths
         self.mask_paths = mask_paths
         self.batch_size = batch_size
@@ -90,11 +83,16 @@ class CustomDataGenerator(Sequence):
         self.image_size = image_size
         self.num_of_classes = num_of_classes
         self.use_augmentation = False
+        self.use_brigth_augmentation = False
         if data_augmentation_config: #NOTE Nogle augments bør virke forskelligt for billede og labels (eksempelvis brightness)
             self.use_augmentation = True
             a_seed = random.randint(0, 2000000000)
             self.img_augment = data_augmentation_config(a_seed)
             self.mask_augment = data_augmentation_config(a_seed)
+        if brightness_contrast_augmentation_config:
+            self.use_brigth_augmentation = True
+            a_seed = random.randint(0, 2000000000)
+            self.img_bright_augment = brightness_contrast_augmentation_config(a_seed)
 
     def __len__(self):
         return int(np.ceil(len(self.image_paths) / self.batch_size))
@@ -115,6 +113,8 @@ class CustomDataGenerator(Sequence):
             img = tf.image.decode_png(raw_img, channels=3)
             if self.use_augmentation:
                 img = self.img_augment(img)
+            if self.use_brigth_augmentation:
+                img = self.img_bright_augment(img)
             img.set_shape([None, None, 3])
             img = tf.image.resize(images=img, size=[self.image_size, self.image_size])
             img = tf.keras.applications.resnet50.preprocess_input(img)

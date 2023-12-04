@@ -13,16 +13,21 @@ import numpy as np
 from tensorflow.keras import layers
 import matplotlib.pyplot as plt
 import cv2
-import background_model_functions as mf
 from sklearn.model_selection import train_test_split
 import random
+from sklearn.metrics import top_k_accuracy_score
 
-class_labels={0:'background',1:'candy',2:'egg tart',3:'french fries',4:'chocolate',5:'biscuit',6:'popcorn',7:'pudding',8:'ice cream',9:'cheese butter',10:'cake',11:'wine',12:'milkshake',13:'coffee',14:'juice',15:'milk',16:'tea',17:'almond',18:'red beans',19:'cashew',20:'dried cranberries',21:'soy',22:'walnut',23:'peanut',24:'egg',25:'apple',26:'date',27:'apricot',28:'avocado',29:'banana',30:'strawberry',31:'cherry',32:'blueberry',33:'raspberry',34:'mango',35:'olives',36:'peach',37:'lemon',38:'pear',39:'fig',40:'pineapple',41:'grape',42:'kiwi',43:'melon',44:'orange',45:'watermelon',46:'steak',47:'pork',48:'chicken duck',49:'sausage',50:'fried meat',51:'lamb',52:'sauce',53:'crab',54:'fish',55:'shellfish',56:'shrimp',57:'soup',58:'bread',59:'corn',60:'hamburg',61:'pizza',62:' hanamaki baozi',63:'wonton dumplings',64:'pasta',65:'noodles',66:'rice',67:'pie',68:'tofu',69:'eggplant',70:'potato',71:'garlic',72:'cauliflower',73:'tomato',74:'kelp',75:'seaweed',76:'spring onion',77:'rape',78:'ginger',79:'okra',80:'lettuce',81:'pumpkin',82:'cucumber',83:'white radish',84:'carrot',85:'asparagus',86:'bamboo shoots',87:'broccoli',88:'celery stick',89:'cilantro mint',90:'snow peas',91:' cabbage',92:'bean sprouts',93:'onion',94:'pepper',95:'green beans',96:'French beans',97:'king oyster mushroom',98:'shiitake',99:'enoki mushroom',100:'oyster mushroom',101:'white button mushroom',102:'salad',103:'other ingredients'}
-data_folder_path = Path(os.getcwd()+ r"/Dataset/FoodSeg103/Images")
+# Our stuff
+from labels import labels
+import background_model_functions as mf
+
+class_labels = labels
+data_folder_path = Path(os.getcwd() + r"/Dataset/FoodSeg103/Images")
 models_path = Path(os.getcwd() + r"/Models")
 batch_size = 8
 image_size = 128
 num_classes = 104
+
 
 def __load_images_combined__():
     num_train_images = 4983
@@ -31,7 +36,7 @@ def __load_images_combined__():
     train_ann_path = Path(data_folder_path, r"ann_dir/train")
     test_images_path = Path(data_folder_path, r"img_dir/test")
     test_ann_path = Path(data_folder_path, r"ann_dir/test")
-    
+
     train_images_paths = sorted(os.listdir(train_images_path))
     train_ann_paths = sorted(os.listdir(train_ann_path))
     test_images_paths = sorted(os.listdir(test_images_path))
@@ -47,21 +52,26 @@ def __load_images_combined__():
     val_images = [str(Path(test_images_path, img)) for img in val_images]
     val_masks = [str(Path(test_ann_path, img)) for img in val_masks]
 
-    image_paths=sorted(train_images + val_images)
-    mask_paths=sorted(train_masks + val_masks)
+    image_paths = sorted(train_images + val_images)
+    mask_paths = sorted(train_masks + val_masks)
 
     return image_paths, mask_paths
 
+
 image_paths, mask_paths = __load_images_combined__()
-train_image_paths, val_image_paths, train_mask_paths, val_mask_paths = train_test_split(image_paths, mask_paths, test_size=0.2)
+train_image_paths, val_image_paths, train_mask_paths, val_mask_paths = train_test_split(
+    image_paths, mask_paths, test_size=0.2
+)
+
 
 def load_model(model_folder_name):
     folder_load_path = os.path.join(models_path, Path(model_folder_name))
     his_load_path = os.path.join(folder_load_path, Path(r"history.npy"))
     model_load_path = os.path.join(folder_load_path, Path(r"model.keras"))
-    history=np.load(his_load_path,allow_pickle='TRUE').item()
+    history = np.load(his_load_path, allow_pickle="TRUE").item()
     model = keras.models.load_model(model_load_path)
     return (model, history)
+
 
 def save_model(model, history):
     dt_string = datetime.now().strftime("%d%m%Y-%H:%M:%S")
@@ -70,43 +80,187 @@ def save_model(model, history):
     os.mkdir(folder_save_path)
     his_save_path = os.path.join(folder_save_path, Path(r"history.npy"))
     model_save_path = os.path.join(folder_save_path, Path(r"model.keras"))
-    np.save(his_save_path,history)
+    np.save(his_save_path, history)
     model.save(model_save_path)
 
-def train_new_model(epochs, useEarlyStopping=True, loss=keras.losses.CategoricalCrossentropy(from_logits=False), optimizer2 = keras.optimizers.Adam(learning_rate = 0.001, weight_decay = 0.0001), data_augmentation_config=None):
-    train_data_generator = mf.CustomDataGenerator(train_image_paths, train_mask_paths, batch_size, image_size, num_classes, data_augmentation_config)
-    val_data_generator = mf.CustomDataGenerator(val_image_paths, val_mask_paths, batch_size, image_size, num_classes, None)
-    model = mf.DeeplabV3Plus(image_size, num_classes)
-    model.compile(
-    optimizer=optimizer2,
-      loss=loss,
-      metrics=[
-          keras.metrics.OneHotMeanIoU(num_classes, ignore_class=0),
-          keras.metrics.CategoricalAccuracy(),
-      ])
 
-    early_stopping = EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True)
+def train_new_model(
+    epochs,
+    useEarlyStopping=True,
+    loss=keras.losses.CategoricalCrossentropy(from_logits=False),
+    optimizer2=keras.optimizers.Adam(learning_rate=0.001, weight_decay=0.0001),
+    data_augmentation_config=None,
+):
+    train_data_generator = mf.CustomDataGenerator(
+        train_image_paths,
+        train_mask_paths,
+        batch_size,
+        image_size,
+        num_classes,
+        data_augmentation_config,
+    )
+    val_data_generator = mf.CustomDataGenerator(
+        val_image_paths, val_mask_paths, batch_size, image_size, num_classes, None
+    )
+    model = mf.DeeplabV3Plus(image_size, num_classes, False)
+    model.compile(
+        optimizer=optimizer2,
+        loss=loss,
+        metrics=[
+            keras.metrics.TopKCategoricalAccuracy(k=5),
+            keras.metrics.OneHotMeanIoU(num_classes, ignore_class=0),
+            keras.metrics.CategoricalAccuracy(),
+        ],
+    )
+
+    early_stopping = EarlyStopping(
+        monitor="val_loss", patience=15, restore_best_weights=True
+    )
 
     history = model.fit(
         train_data_generator,
-        steps_per_epoch=len(train_image_paths)//batch_size,
+        steps_per_epoch=len(train_image_paths) // batch_size,
         validation_data=val_data_generator,
-        validation_steps=len(val_image_paths)//batch_size,
+        validation_steps=len(val_image_paths) // batch_size,
         epochs=epochs,
-        callbacks=([early_stopping] if useEarlyStopping else [])
+        callbacks=([early_stopping] if useEarlyStopping else []),
     )
+
     return model, history
 
-def create_data_augmentation_config():
-    #Find ud af at tilføj sandsynligheder til augmentations
-    return lambda seed : (
-        tf.keras.Sequential([
-            keras.layers.RandomFlip("horizontal", seed),
-            keras.layers.RandomRotation(0.15, fill_mode="constant", seed=seed, fill_value=0.)
-        ])
+
+def train_new_model_fine_tuning(
+    epochs,
+    useEarlyStopping=True,
+    loss=keras.losses.CategoricalCrossentropy(from_logits=False),
+    optimizer2=keras.optimizers.Adam(learning_rate=0.001, weight_decay=0.0001),
+    data_augmentation_config=None,
+    brightness_contrast_augmentation_config=None,
+):
+    train_data_generator = mf.CustomDataGenerator(
+        train_image_paths,
+        train_mask_paths,
+        batch_size,
+        image_size,
+        num_classes,
+        data_augmentation_config,
+        brightness_contrast_augmentation_config,
     )
 
-def display_image(index, data_augmentation_config): #Consider changing index to path
+    val_data_generator = mf.CustomDataGenerator(
+        val_image_paths, val_mask_paths, batch_size, image_size, num_classes, None
+    )
+
+    # BASE TRAINING
+    early_stopping = EarlyStopping(
+        monitor="val_loss", patience=3, restore_best_weights=True
+    )
+
+
+
+    ####
+    model_input = keras.Input(shape=(image_size, image_size, 3))
+    resnet50 = keras.applications.ResNet50(
+        weights="imagenet", include_top=False, input_tensor=model_input
+    )
+    resnet50.trainable = False
+    x = resnet50.get_layer("conv4_block6_2_relu").output
+    x = mf.DilatedSpatialPyramidPooling(x)
+
+    input_a = layers.UpSampling2D(
+        size=(image_size // 4 // x.shape[1], image_size // 4 // x.shape[2]),
+        interpolation="bilinear",
+    )(x)
+    input_b = resnet50.get_layer("conv2_block3_2_relu").output
+    input_b = mf.convolution_block(input_b, num_filters=48, kernel_size=1)
+
+    x = layers.Concatenate(axis=-1)([input_a, input_b])
+    x = mf.convolution_block(x)
+    x = mf.convolution_block(x)
+    x = layers.UpSampling2D(
+        size=(image_size // x.shape[1], image_size // x.shape[2]),
+        interpolation="bilinear",
+    )(x)
+    model_output = layers.Conv2D(num_classes, kernel_size=(1, 1), padding="same", kernel_initializer=keras.initializers.HeNormal(), activation='softmax')(x)
+
+    model = keras.Model(inputs=model_input, outputs=model_output)
+    ####
+    
+    
+    model.compile(
+        optimizer=optimizer2,
+        loss=loss,
+        metrics=[
+            keras.metrics.TopKCategoricalAccuracy(k=5),
+            keras.metrics.OneHotMeanIoU(num_classes, ignore_class=0),
+            keras.metrics.CategoricalAccuracy(),
+        ],
+    )
+
+    history = model.fit(
+        train_data_generator,
+        steps_per_epoch=len(train_image_paths) // batch_size,
+        validation_data=val_data_generator,
+        validation_steps=len(val_image_paths) // batch_size,
+        epochs=200,
+        callbacks=([early_stopping] if useEarlyStopping else []),
+    )
+
+    # FINE TUNING
+    resnet50.trainable = True
+    
+    early_stopping_tuning = EarlyStopping(
+        monitor="val_loss", patience=3, restore_best_weights=True
+    )
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=0.00001, weight_decay=0.0001),
+        loss=keras.losses.CategoricalFocalCrossentropy(from_logits=False),
+        metrics=[
+            keras.metrics.TopKCategoricalAccuracy(k=5),
+            keras.metrics.OneHotMeanIoU(num_classes, ignore_class=0),
+            keras.metrics.CategoricalAccuracy(),
+        ],
+    )
+
+    history_fine_tuned = model.fit(
+        train_data_generator,
+        steps_per_epoch=len(train_image_paths) // batch_size,
+        validation_data=val_data_generator,
+        validation_steps=len(val_image_paths) // batch_size,
+        epochs=5,
+        callbacks=([early_stopping_tuning] if useEarlyStopping else []),
+    )
+     
+    # RETURN 
+    return model, history, history_fine_tuned
+
+def create_data_augmentation_config():
+    # Find ud af at tilføj sandsynligheder til augmentations
+    return lambda seed: (
+        tf.keras.Sequential(
+            [
+                keras.layers.RandomFlip("horizontal", seed),
+                keras.layers.RandomRotation(
+                    0.15, fill_mode="constant", seed=seed, fill_value=0.0
+                ),
+                keras.layers.RandomZoom(height_factor=(0.2, -0.2), fill_mode='constant', fill_value=0.0, interpolation='bilinear', seed=seed),
+            ]
+        )
+    )
+
+def create_brightness_contrast_augmentation_config():
+    return lambda seed: (
+        tf.keras.Sequential(
+            [
+                keras.layers.RandomBrightness(factor=0.2, seed=seed),
+                keras.layers.RandomContrast(factor=0.2, seed=seed),
+            ]
+        )
+    )
+
+
+def display_image(index, data_augmentation_config):  # Consider changing index to path
     a_seed = random.randint(0, 2000000000)
     augment = data_augmentation_config(a_seed)
 
@@ -120,39 +274,44 @@ def display_image(index, data_augmentation_config): #Consider changing index to 
     plt.imshow(resized_image_for_display)
     plt.show()
 
-def display_prediction(model, index): #Consider changing index to path
+
+def display_prediction(model, index):  # Consider changing index to path
     raw_img = tf.io.read_file(val_image_paths[index])
     raw_img = tf.image.decode_png(raw_img, channels=3)
     raw_img.set_shape([None, None, 3])
     resized_img = tf.image.resize(images=raw_img, size=[image_size, image_size])
-    img_to_predict = tf.keras.applications.resnet50.preprocess_input(resized_img)[None,:,:,:] #Model is made to predict many images, only 1 means add None
+    img_to_predict = tf.keras.applications.resnet50.preprocess_input(resized_img)[
+        None, :, :, :
+    ]  # Model is made to predict many images, only 1 means add None
     prediction = model(img_to_predict)
-    max_prediction =  np.argmax(prediction, axis=-1)[0]
+    max_prediction = np.argmax(prediction, axis=-1)[0]
 
     raw_mask = tf.io.read_file(val_mask_paths[index])
     raw_mask = tf.image.decode_png(raw_mask, channels=1)
     raw_mask.set_shape([None, None, 1])
-    resized_mask = tf.image.resize(images=raw_mask, size=[image_size, image_size], method='nearest')
+    resized_mask = tf.image.resize(
+        images=raw_mask, size=[image_size, image_size], method="nearest"
+    )
 
-    #Plotting
+    # Plotting
     fig = plt.figure(figsize=(12, 5))
-    cm = plt.get_cmap('viridis', lut=num_classes)
+    cm = plt.get_cmap("viridis", lut=num_classes)
 
     resized_image_for_display = np.ceil(resized_img) / 256
-    fig.add_subplot(1, 3, 1) 
-    plt.imshow(resized_image_for_display) 
-    plt.axis('off') 
-    plt.title("Original (resized) image") 
-    
+    fig.add_subplot(1, 3, 1)
+    plt.imshow(resized_image_for_display)
+    plt.axis("off")
+    plt.title("Original (resized) image")
+
     resized_mask_for_display = np.squeeze(resized_mask)
-    fig.add_subplot(1, 3, 2) 
-    plt.imshow(resized_mask_for_display, cm, vmin=0, vmax=num_classes) 
-    plt.axis('off') 
-    plt.title("True labels") 
-    
-    fig.add_subplot(1, 3, 3) 
-    plt.imshow(max_prediction, cm, vmin=0, vmax=num_classes) 
-    plt.axis('off') 
-    plt.title("Predicted labels") 
+    fig.add_subplot(1, 3, 2)
+    plt.imshow(resized_mask_for_display, cm, vmin=0, vmax=num_classes)
+    plt.axis("off")
+    plt.title("True labels")
+
+    fig.add_subplot(1, 3, 3)
+    plt.imshow(max_prediction, cm, vmin=0, vmax=num_classes)
+    plt.axis("off")
+    plt.title("Predicted labels")
 
     fig.show()
