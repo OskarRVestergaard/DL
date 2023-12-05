@@ -153,7 +153,7 @@ def train_new_model_fine_tuning(
 
     # BASE TRAINING
     early_stopping = EarlyStopping(
-        monitor="val_loss", patience=3, restore_best_weights=True
+        monitor="val_loss", patience=5, restore_best_weights=True
     )
 
 
@@ -210,7 +210,7 @@ def train_new_model_fine_tuning(
     resnet50.trainable = True
     
     early_stopping_tuning = EarlyStopping(
-        monitor="val_loss", patience=3, restore_best_weights=True
+        monitor="val_loss", patience=5, restore_best_weights=True
     )
 
     model.compile(
@@ -228,7 +228,7 @@ def train_new_model_fine_tuning(
         steps_per_epoch=len(train_image_paths) // batch_size,
         validation_data=val_data_generator,
         validation_steps=len(val_image_paths) // batch_size,
-        epochs=5,
+        epochs=200,
         callbacks=([early_stopping_tuning] if useEarlyStopping else []),
     )
      
