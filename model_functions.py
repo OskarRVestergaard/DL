@@ -1,6 +1,7 @@
 from os import environ, path
 from absl import logging as absl_logging
 from IPython.display import clear_output
+from keras.utils import to_categorical
 from tensorflow import keras
 import tensorflow as tf
 from sklearn.model_selection import ParameterSampler
@@ -128,6 +129,30 @@ def train_new_model(
 
     return model, history
 
+def AlwaysBackground():
+    input = keras.Input(shape=(image_size, image_size, 3))
+    model = tf.keras.models.Sequential()
+    model.add(input)
+
+    def predictBackground(x):
+        zeroes = np.zeros(
+            shape=(1, image_size, image_size, 104)
+        )
+        zeroes[0,:,:,0] = 1.
+        return tf.convert_to_tensor(zeroes)
+
+    model.add(keras.layers.Lambda(predictBackground, output_shape=(1, image_size, image_size, 104)))
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=0.001, weight_decay=0.0001),
+        loss=keras.losses.CategoricalCrossentropy(from_logits=False),
+        metrics=[
+            keras.metrics.TopKCategoricalAccuracy(k=5),
+            keras.metrics.OneHotMeanIoU(num_classes, ignore_class=0),
+            keras.metrics.CategoricalAccuracy(),
+        ],
+    )
+    return model
+
 
 def train_new_model_fine_tuning(
     epochs,
@@ -249,12 +274,25 @@ def create_data_augmentation_config():
         )
     )
 
+def create_data_augmentation_config_crop():
+    # Find ud af at tilføj sandsynligheder til augmentations
+    return lambda seed: (
+        tf.keras.Sequential(
+            [
+                keras.layers.RandomFlip("horizontal", seed),
+                keras.layers.RandomRotation(
+                    0.15, fill_mode="constant", seed=seed, fill_value=0.0
+                ),
+                keras.layers.RandomCrop(height=128, width=128, seed=seed),
+            ]
+        )
+    )
 def create_brightness_contrast_augmentation_config():
     return lambda seed: (
         tf.keras.Sequential(
             [
                 keras.layers.RandomBrightness(factor=0.2, seed=seed),
-                keras.layers.RandomContrast(factor=0.2, seed=seed),
+                keras.layers.RandomContrast(factor=0.1, seed=seed),
             ]
         )
     )
@@ -284,7 +322,9 @@ def display_prediction(model, index):  # Consider changing index to path
         None, :, :, :
     ]  # Model is made to predict many images, only 1 means add None
     prediction = model(img_to_predict)
+    print(prediction.shape)
     max_prediction = np.argmax(prediction, axis=-1)[0]
+    print(max_prediction.shape)
 
     raw_mask = tf.io.read_file(val_mask_paths[index])
     raw_mask = tf.image.decode_png(raw_mask, channels=1)
