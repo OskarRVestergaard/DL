@@ -1,4 +1,8 @@
 # DL
+## DATASET DOWNLOAD LINK BELOW
+https://research.larc.smu.edu.sg/downloads/datarepo/FoodSeg103.zip
+password: LARCdataset9947
+
 The .py files are mainly helper functions and other useful functions, implemented by us.
 
 Our model is highly inspired by Keras (https://keras.io/examples/vision/deeplabv3_plus/)
