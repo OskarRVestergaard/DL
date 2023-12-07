@@ -157,7 +157,7 @@ def AlwaysBackground():
 def train_new_model_fine_tuning(
     epochs,
     useEarlyStopping=True,
-    loss=keras.losses.CategoricalCrossentropy(from_logits=False),
+    loss=keras.losses.CategoricalFocalCrossentropy(from_logits=False),
     optimizer2=keras.optimizers.Adam(learning_rate=0.001, weight_decay=0.0001),
     data_augmentation_config=None,
     brightness_contrast_augmentation_config=None,
@@ -355,3 +355,74 @@ def display_prediction(model, index):  # Consider changing index to path
     plt.title("Predicted labels")
 
     fig.show()
+
+def load_histories(history_freeze: Path, history_fine_tuned: Path):
+    history_freeze = np.load(history_freeze, allow_pickle="TRUE").item()
+    history_fine_tuned = np.load(history_fine_tuned, allow_pickle="TRUE").item()
+    
+    return history_freeze, history_fine_tuned
+
+def create_history_graph_loss(history_freeze, history_tuned, start_y, end_y, spacing):
+    # out of sample
+    pre_fine_tuning_val_loss = history_freeze.history['val_loss'].copy()
+    fine_tuning_val_loss = history_tuned.history['val_loss'].copy()
+    best_val_loss_index = pre_fine_tuning_val_loss.index(min(pre_fine_tuning_val_loss))
+    pre_fine_tuning_val_loss.append(pre_fine_tuning_val_loss[best_val_loss_index])
+
+    combined_val_loss = pre_fine_tuning_val_loss + fine_tuning_val_loss
+
+    # in sample
+    pre_fine_tuning_loss = history_freeze.history['loss'].copy()
+    fine_tuning_loss = history_tuned.history['loss'].copy()
+    pre_fine_tuning_loss.append(pre_fine_tuning_loss[best_val_loss_index])
+
+    combined_loss = pre_fine_tuning_loss + fine_tuning_loss
+
+    # epochs
+    no_of_epochs_pre_tuned = len(pre_fine_tuning_val_loss) 
+    no_of_epochs_tuned = len(fine_tuning_val_loss) 
+
+    # Create x-axis values for the combined data
+    epochs = list(range(1, no_of_epochs_pre_tuned + no_of_epochs_tuned + 1))
+    epochs[no_of_epochs_pre_tuned - 1] = no_of_epochs_pre_tuned - 1 + 0.0001
+
+    for i, epoch in enumerate(epochs):
+        if epoch >= len(history_freeze.history['val_loss']) + 1:
+            epochs[i] = epoch - 1
+
+    # Plotting the combined validation loss
+    plt.plot(epochs, combined_val_loss, label='Validation Loss', color='orange')
+    plt.plot(epochs, combined_loss, label='Training Loss')
+    plt.plot(epochs[no_of_epochs_pre_tuned - 2:no_of_epochs_pre_tuned], combined_loss[no_of_epochs_pre_tuned - 2:no_of_epochs_pre_tuned], color='white',  zorder=100)
+    plt.plot(epochs[no_of_epochs_pre_tuned - 2:no_of_epochs_pre_tuned], combined_val_loss[no_of_epochs_pre_tuned - 2:no_of_epochs_pre_tuned], color='white',  zorder=100)
+
+
+    # Indicate the transition point between pre-fine-tuning and fine-tuning
+    plt.axvline(x=no_of_epochs_pre_tuned - 1, color='gray', linestyle='--', label='Fine-tuning Start',  zorder=101)
+    plt.axvline(x=best_val_loss_index + 1, color='green', linestyle='--', label='Restored Epoch',  zorder=101)
+
+    # Setting labels for the axes
+    plt.xlabel('Epochs')
+    plt.ylabel('Validation Loss')
+
+    # Set x-axis ticks to show only integers
+    plt.xticks(range(1, len(epochs) + 1, spacing))
+
+
+    plt.ylim(start_y, end_y)
+    # plt.ylim(0, np.ceil(max(max(combined_loss), max(combined_val_loss))))
+    plt.xlim(1, len(combined_val_loss))
+
+    fill_start_epoch = pre_fine_tuning_val_loss.index(min(pre_fine_tuning_val_loss)) + 1
+    fill_end_epoch = no_of_epochs_pre_tuned
+    plt.fill_between(epochs[fill_start_epoch-1:fill_end_epoch], 0, np.ceil(max(max(combined_loss), max(combined_val_loss))), color='gray', alpha=0.3,  zorder=101)
+
+    plt.plot(epochs[fill_start_epoch-1:fill_end_epoch], combined_val_loss[fill_start_epoch-1:fill_end_epoch], color='gray')
+    plt.plot(epochs[fill_start_epoch-1:fill_end_epoch], combined_loss[fill_start_epoch-1:fill_end_epoch], color='gray')
+    plt.grid(axis='y', linestyle='-', alpha=0.7, zorder=0)
+
+    # Adding legend
+    plt.legend()
+
+    # Display the plot
+    plt.show()
